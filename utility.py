@@ -27,7 +27,7 @@ import pickle
 import time
 from shapely.geometry import Polygon
 
-filename = "/home/rageobi/Desktop/project/Python/svc_hope.p"
+filename = "/home/rageobi/Desktop/DetectionSystem/data/svc_hope.p"
 #filename = "/home/rageobi/Desktop/project/Python/svm_9927.p"
 classifier1 = pickle.load(open(filename, 'rb'))
 
@@ -163,10 +163,10 @@ def custom_map_pointcloud_to_image(selsf,
 
 
 def appendtoclusterlist(x, y):
-    ss = ClusterLists()
-    for s in zip(x, y):
-        ss.append(Cluster(s[0], s[1]))
-    return ss
+    cl = ClusterLists()
+    for data in zip(x, y):
+        cl.append(Cluster(data[0], data[1]))
+    return cl
 
 
 def get_boxes(frame, point, visualize=False):
@@ -225,13 +225,16 @@ def get_boxes(frame, point, visualize=False):
         frame_slides_final = frame_slides_canvas(frame, calculated_slides)
 
         if visualize:
-            f, axes = plt.subplots(1, 3, figsize=(15, 80))
+            f, axes = plt.subplots(1, 3, figsize=(20, 100))
+            axes[0].set_title("All Sliding Windows")
             axes[0].imshow(frame_slides_complete)
-            axes[0].set_title("Window Coverage")
-            axes[1].set_title("Test Image with Refined Sliding Windows")
+            
+            axes[1].set_title("Refined Sliding Windows")
             axes[1].imshow(frame_slides_refined)
+
+            axes[2].set_title("Final Prediction")
             axes[2].imshow(frame_slides_final)
-            axes[2].set_title("Final Image after applying Heat Map")
+            
             plt.show()
 
         final_boxes = []
