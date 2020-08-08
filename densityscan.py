@@ -46,11 +46,12 @@ class ClusterLists():
         self.randoms = []
         self.cluster_val = 1
 
-    def get_cluster_labels(self):
+    def get_cluster_labels(self,verbose=False):
         st = []
         for x in self.cluster_list:
             st.append(x.cluster)
-        print(st)
+        if verbose:
+            print(("     {} clusters for the frame is").format(len(st)))
         return st
 
     def update_random(self):
@@ -59,13 +60,13 @@ class ClusterLists():
         if (len(self.randoms) != len(self.cluster_list)):
             self.randoms = list(range(self.cluster_list.shape[0]))
 
-    def cluster_cluster(self,x_dist,y_dist):
+    def cluster_cluster(self,x_dist,y_dist,verbose):
         self.update_random()
         for i in range(0, len(self.cluster_list)):#len(self.randoms)):
             #choice = random.choice(self.randoms)
             self.CheckValidClusters(self.cluster_list[i], x_dist, y_dist)
             #self.randoms.remove(choice)
-        return np.array(self.get_cluster_labels())
+        return np.array(self.get_cluster_labels(verbose))
 
     def append(self, cluster: Cluster):
         self.cluster_list.append(cluster)
