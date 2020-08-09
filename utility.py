@@ -61,6 +61,7 @@ def custom_map_pointcloud_to_image(nusc,
                                    min_dist: float = 1.0,
                                    render_intensity: bool = False,
                                    verbose=False):
+    #Inspired from the NuScenes Dev-Kit
     """
     Given a point sensor (lidar/radar) token and camera sample_data token, load point-cloud and map it to the image
     plane.
@@ -181,8 +182,12 @@ def get_boxes_yolo(frame, method, point, visualize=False,verbose=False):
 
     if method == 2:
         #frame_copy = np.copy(frame)
-        if point[3] < 20:
+        if point[3] < 15:
+            frame_size = 450
+
+        elif point[3] < 20:
             frame_size = 200
+        
         else:
             frame_size =100
     
@@ -240,11 +245,11 @@ def load_net(weights_location='data/YOLOv3/yolov3.weights', config_location='dat
 
 
 def get_yolo_detections(frame, primary_origin=(0, 0)):
-    # Reference from https://pysource.com/2019/06/27/yolo-object-detection-using-opencv-with-python/
+    # Reference - https://pysource.com/2019/06/27/yolo-object-detection-using-opencv-with-python/
     global net, output_layers, classes
     height, width, channels = frame.shape
     blob = cv2.dnn.blobFromImage(
-        frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+        frame, 0.00392, (320, 320), (0, 0, 0), True, crop=False)
     net.setInput(blob)
     outs = net.forward(output_layers)
     class_ids = []
@@ -256,12 +261,10 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
             class_id = np.argmax(scores)
             confidence = scores[class_id]
             if confidence > 0.5 and class_id in [2, 5, 7]:
-                # Object detected
                 center_x = int(detection[0] * width)
                 center_y = int(detection[1] * height)
                 w = int(detection[2] * width)
                 h = int(detection[3] * height)
-                # Rectangle coordinates
                 x = int(center_x - w / 2)
                 y = int(center_y - h / 2)
                 boxes.append([x, y, w, h])
@@ -288,42 +291,42 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
 def get_boxes_svm(frame, point, visualize=False, verbose=False):
 
     if point[3] < 15:
-        imsize_x = 500
-        imsize_y = 500
+        frame_size = 500
+        #frame_size_y = 500
 
     elif point[3] < 20:
-        imsize_x = 250
-        imsize_y = 250
+        frame_size = 250
+        #frame_size_y = 250
 
     elif point[3] < 30:
-        imsize_x = 200
-        imsize_y = 200
+        frame_size = 200
+        #frame_size_y = 200
 
     elif point[3] < 40:
-        imsize_x = 150
-        imsize_y = 150
+        frame_size = 150
+        #frame_size_y = 150
 
     elif point[3] < 50:
-        imsize_x = 120
-        imsize_y = 120
+        frame_size = 120
+        #frame_size_y = 120
 
     elif point[3] < 70:
-        imsize_x = 50
-        imsize_y = 50
+        frame_size = 50
+        #frame_size_y = 50
 
     else:
-        imsize_x = False
-    if imsize_x:
+        frame_size = False
+    if frame_size:
         if point[3] > 14:
-            window_size_1 = int(0.5 * (imsize_x))
-            window_size_2 = int(0.3 * (imsize_x))
+            window_size_1 = int(0.5 * (frame_size))
+            window_size_2 = int(0.3 * (frame_size))
         else:
-            window_size_1 = int(0.65 * (imsize_x))
-            window_size_2 = int(0.45 * (imsize_x))
-        x1 = int(round(point[0])) - ((imsize_x)//2)
-        y1 = int(round(point[1]))-((imsize_y)//2)
-        x2 = int(round(point[0]))+int((imsize_x)//1.5)
-        y2 = int(round(point[1]))+((imsize_y)//3)
+            window_size_1 = int(0.65 * (frame_size))
+            window_size_2 = int(0.45 * (frame_size))
+        x1 = int(round(point[0])) - ((frame_size) // 2)
+        y1 = int(round(point[1])) - ((frame_size) // 2)
+        x2 = int(round(point[0])) + ((frame_size) // 1.5)
+        y2 = int(round(point[1])) + ((frame_size) // 3)
         frame = frame.crop((x1, y1, x2, y2))
 
         frame = np.array(frame)
@@ -420,13 +423,13 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=2, visualize
                 d = bbox[j][1][1]
                 if (len(box) < 1):
                     box.append([[a, b], [c, b], [c, d], [a, d]])
-                    #cv2.rectangle(img, (a,b),(c,d), color=(0, 0, 255), thickness=2)
-                    # plt.imshow(img)
+                    #cv2.rectangle(frame, (a,b),(c,d), color=(0, 0, 255), thickness=2)
+                    # plt.imshow(frame)
                     # plt.show()
                 else:
                     if check_box_area([[a, b], [c, b], [c, d], [a, d]], box, frame):
                         box.append([[a, b], [c, b], [c, d], [a, d]])
-                        #cv2.rectangle(img, (a, b), (c, d), color=(0, 255, 0), thickness=2)
+                        #cv2.rectangle(frame, (a, b), (c, d), color=(0, 255, 0), thickness=2)
                     else:
                         global c_slide
                         b1_area, b2_area = get_box_area(
@@ -434,16 +437,19 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=2, visualize
                         if b2_area > b1_area:
                             box.remove(c_slide)
                             box.append([[a, b], [c, b], [c, d], [a, d]])
-                            #cv2.rectangle(img, (a, b), (c, d), color=(0, 255, 0), thickness=2)
-                            #cv2.rectangle(img, (c_box[0][0], c_box[0][1]), (c_box[2][0], c_box[2][1]), color=(255, 0, 0), thickness=2)
-                        #cv2.rectangle (imm,(a,b),(c,d), color=(0, 255, 0), thickness=2)
-                        # plt.imshow(imm)
+                            #cv2.rectangle(frame, (a, b), (c, d), color=(0, 255, 0), thickness=2)
+                            #cv2.rectangle(frame, (c_box[0][0], c_box[0][1]), (c_box[2][0], c_box[2][1]), color=(255, 0, 0), thickness=2)
+                        #cv2.rectangle (frame,(a,b),(c,d), color=(0, 255, 0), thickness=2)
+                        # plt.imshow(frame)
                         # plt.show()
     if verbose:
-        print('     Total number of vehicle regions predicted in frame:',len(box))
+        print('     Total number of vehicle regions predicted in frame:', len(box))
+    marked_boxes=[]
     for rect in box:
         cv2.rectangle(frame, (rect[0][0], rect[0][1]), (rect[2][0], rect[2][1]), color=(
             0, 255, 0), thickness=2)
+        marked_boxes.append(((rect[0][0], rect[0][1]), (rect[2][0], rect[2][1])))
+        
     if visualize_frames:
         # plt.imshow(frame)
         # plt.show()
@@ -451,7 +457,8 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=2, visualize
             print('     Visualising points and predicted frames')
         points_in_image(p, np.array(averages)[:, :2], color, frame)
 
-    return frame
+    return frame, box
+
 
 
 def points_in_image(points, averages, colouring, frame):
@@ -509,9 +516,9 @@ def get_box_area(box_1, box_2):
 def check_box_area(box1, boxes, frame, visualize=False):
     for box2 in boxes:
         if not (box2 == box1):
-            iou = calculate_intersection(box1, box2)
+            intersection = calculate_intersection(box1, box2)
             a1, a2 = get_box_area(box1, box2)
-            if iou < 0.80*a1 and iou < 0.80*a2:
+            if intersection < 0.80*a1 and intersection < 0.80*a2:
                 continue
             else:
                 global c_slide
@@ -536,9 +543,14 @@ def check_box_area(box1, boxes, frame, visualize=False):
 def calculate_intersection(box_1, box_2):
     poly_1 = Polygon(box_1)
     poly_2 = Polygon(box_2)
-    iou = poly_1.intersection(poly_2).area  # / poly_1.union(poly_2).area
-    return iou
+    intersection = poly_1.intersection(poly_2).area  # / poly_1.union(poly_2).area
+    return intersection
 
+def calculate_iou(box_1, box_2):
+    poly_1 = Polygon(box_1)
+    poly_2 = Polygon(box_2)
+    iou = poly_1.intersection(poly_2).area / poly_1.union(poly_2).area
+    return iou
 
 def get_window_slides(frame, window_size, overlap):
     assert frame.shape[1] > window_size
@@ -621,8 +633,8 @@ def get_calculated_box(frame_size, slide_windows):
     for y_row, x_col in detected_slides:
         calculated_slides.append(
             ((x_col.start, y_row.start), (x_col.stop, y_row.stop)))
-        #cv2.rectangle (imm,(x.start,y.start),(x.stop,y.stop), color=(0, 255, 0), thickness=1)
-        # plt.imshow(imm)
+        #cv2.rectangle (frame,(x.start,y.start),(x.stop,y.stop), color=(0, 255, 0), thickness=1)
+        # plt.imshow(frame)
         # plt.show()
     return proba_frame, calculated_slides
 
@@ -637,7 +649,74 @@ def save_video(frames, filename, fps, size):
     video.release()
     print(('Saved Video {} successfully').format(filename))
 
-def main(method=2, visualize_frames=False,visualize_sub_frames=False,verbose=False):
+def get_annotations(nusc,scene_annotations, cam_token,visualize=False,verbose=False):
+    annotated_boxes=[]
+    for ann_token in scene_annotations:
+            cam = cam_token
+            ann_record = nusc.get('sample_annotation', ann_token)
+            
+            if len(ann_record['attribute_tokens']) > 0 and ann_record['category_name'] in ['vehicle.car', 'vehicle.truck']:
+                att_token = ann_record['attribute_tokens'][0]
+                att_record = nusc.get('attribute', att_token)
+                if(att_record['name'] in ['vehicle.moving']):#,'vehicle.stopped']):
+                    data_path, boxes, camera_intrinsic = nusc.get_sample_data(cam_token, selected_anntokens=[ann_token])
+                    
+                    for box in boxes:
+                        
+                        corners = view_points(box.corners(), view=camera_intrinsic, normalize=True)[:2, :]
+                        mins = corners.T.min(axis=0)
+                        maxs = corners.T.max(axis=0)
+                        a = int(mins[0])
+                        b = int(mins[1])
+                        c = int(maxs[0])
+                        d = int(maxs[1])
+                        annotated_boxes.append([[a, b], [c, b], [c, d], [a, d]])
+                        if visualize:
+                            if verbose:
+                                print('     Visualising annotations')
+                            frame = Image.open(data_path)
+                            frame_copy = np.array(frame)   
+                            cv2.rectangle(frame_copy, (a,b), (c,d), (0, 255, 0), 2)
+                            plt.imshow(frame_copy)
+                            plt.show()
+    return annotated_boxes
+
+def get_accuracy(marked_boxes, annotated_boxes, frame,visualize= False, verbose = False):
+    
+    
+    iou_list = []
+    average = 0.5
+    for annotated_box in annotated_boxes:
+        frame_copy = np.copy(frame)
+        max_iou = 0
+        pos =-1
+        for i, marked_box in enumerate(marked_boxes):
+            iou = calculate_iou(marked_box, annotated_box)
+            if iou > max_iou:
+                max_iou = iou                
+                pos = i
+        if verbose:
+            print('         IoU is:', max_iou)
+        if max_iou > 0:
+            if visualize:
+                if verbose:
+                    print('         Visualising IOU taken vs actual')
+                cv2.rectangle(frame_copy, (marked_boxes[pos][0][0], marked_boxes[pos][0][1]), (marked_boxes[pos][2][0], marked_boxes[pos][2][1]), color=(
+                255, 0, 0), thickness=2)
+                cv2.rectangle(frame_copy, (annotated_box[0][0], annotated_box[0][1]), (annotated_box[2][0], annotated_box[2][1]), color=(
+                0, 255, 0), thickness=2)
+                plt.imshow(frame_copy)
+                plt.show()
+            iou_list.append(max_iou)
+    
+    if len(iou_list)> 0:
+        average =  round(sum(iou_list) / len(iou_list) ,3)
+    if verbose:
+        print('     Average IoU is:', average)
+
+    return average    
+
+def main(method=2, validate_results=False,visualize_frames=False,visualize_sub_frames=False,verbose=False):
     location = '/home/rageobi/Downloads/v1.0-mini'
     nusc = NuScenes(version='v1.0-mini', dataroot=location, verbose=True)
     pointsensor_channel = 'RADAR_FRONT'
@@ -662,17 +741,27 @@ def main(method=2, visualize_frames=False,visualize_sub_frames=False,verbose=Fal
         last_sample_token = scene['last_sample_token']
         check_token = first_sample_token
         i = 0
+        accuracy=[]
         while (check_token != '') and scene['name'] == 'scene-0061' and i >= 0:
             if verbose:
                 print('     -------------------New-Scene----------------')
             sample_record = nusc.get('sample', check_token)
             pointsensor_token = sample_record['data'][pointsensor_channel]
             camera_token = sample_record['data'][camera_channel]
-            frames.append(get_marked_frames(
-                nusc, pointsensor_token, camera_token, method, visualize_frames, visualize_sub_frames,verbose))
+            
+            marked_frames, marked_boxes = get_marked_frames(
+                nusc, pointsensor_token, camera_token, method, visualize_frames, visualize_sub_frames,verbose)
+            frames.append(marked_frames)
+            if validate_results:
+                scene_annotations = sample_record['anns']
+                annotated_boxes = get_annotations(nusc,scene_annotations,camera_token)
+                cam = nusc.get('sample_data', camera_token)
+                frame = Image.open(osp.join(nusc.dataroot, cam['filename']))
+                accuracy.append(get_accuracy(marked_boxes, annotated_boxes, frame, visualize_sub_frames, True))
             check_token = sample_record['next']
             i += 1
-
+        if verbose and validate_results and len(accuracy) > 0:
+            print('Accuracy for all frames together is :', sum(accuracy)/len(accuracy))
     save_video(frames, filename, 12, frames[0].shape[:2])
 
 t0 = time.time()
