@@ -1,8 +1,10 @@
 data/vehicle_detection_data.p
 __pycache__/densityscan.cpython-38.pyc
-data/YOLOv3/yolov3.weights
-data/YOLOv3/yolov3.cfg
-data/YOLOv3/yolov3-tiny.weights
-data/YOLOv3/yolov3-tiny.cfg
-data/YOLOv3/yolov3_classes.txt
+data/YOLOv4/*
+data/YOLOv3/*
 data/videos/*
+HOG_SVM_721.avi
+*.pcd
+*.pcd.bin
+data/v1.0-mini/*
+.vscode/settings.json
