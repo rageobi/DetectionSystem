@@ -1,3 +1,4 @@
+import argparse
 import multiprocessing
 from functools import partial
 import math
@@ -16,8 +17,8 @@ from scipy.ndimage import find_objects
 from nuscenes.nuscenes import NuScenes
 from nuscenes.utils.data_classes import RadarPointCloud as rpc
 from nuscenes.utils.data_classes import LidarPointCloud as lpc
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker 
+from matplotlib import pyplot as plt
+import matplotlib.ticker as ticker
 import os.path as osp
 import matplotlib.patches as patches
 from PIL import Image
@@ -36,10 +37,12 @@ classes = None
 c_slide = None
 xscaler = None
 
+
 def load_svc():
     filename = "data/svc_hope.p"
     svc = pickle.load(open(filename, 'rb'))
     return svc
+
 
 def load_svc_2():
     filename = "data/svmhopeful.p"
@@ -47,6 +50,7 @@ def load_svc_2():
     filename = "data/xscalerhopeful.p"
     xscaler = pickle.load(open(filename, 'rb'))
     return svc, xscaler
+
 
 def calculation_of_radar_data(radar):
     x_points = radar.points[0]
@@ -66,10 +70,10 @@ def calculation_of_radar_data(radar):
 
 
 def custom_map_pointcloud_to_image(nusc,
-                                   pointsensor_token: str,
-                                   camera_token: str,
+                                   pointsensor_token,
+                                   camera_token,
                                    verbose=False):
-    #Inspired from the NuScenes Dev-Kit
+    # Inspired from the NuScenes Dev-Kit
     # rpc.abidefaults()
     rpc.disable_filters()
     cam = nusc.get('sample_data', camera_token)
@@ -108,7 +112,7 @@ def custom_map_pointcloud_to_image(nusc,
     pc.points = points
 
     cs_record = nusc.get('calibrated_sensor',
-                          pointsensor['calibrated_sensor_token'])
+                         pointsensor['calibrated_sensor_token'])
     pc.rotate(Quaternion(cs_record['rotation']).rotation_matrix)
     pc.translate(np.array(cs_record['translation']))
 
@@ -149,7 +153,7 @@ def custom_map_pointcloud_to_image(nusc,
     points = points[:, mask]
     coloring = coloring[mask]
     if verbose:
-        print('     Total number of points in frame',points.shape[1])
+        print('     Total number of points in frame', points.shape[1])
     return points, coloring, im
 
 
@@ -160,7 +164,7 @@ def appendtoclusterlist(x, y):
     return cl
 
 
-def get_boxes_yolo(frame, method, point, visualize=False,verbose=False):
+def get_boxes_yolo(frame, method, point, visualize=False, verbose=False):
 
     if method == 2:
         #frame_copy = np.copy(frame)
@@ -169,10 +173,10 @@ def get_boxes_yolo(frame, method, point, visualize=False,verbose=False):
 
         elif point[3] < 20:
             frame_size = 200
-        
+
         else:
-            frame_size =100
-    
+            frame_size = 100
+
         x1 = int(round(point[0])) - (frame_size)
         y1 = int(round(point[1])) - (frame_size)
         x2 = int(round(point[0])) + (frame_size)
@@ -192,13 +196,15 @@ def get_boxes_yolo(frame, method, point, visualize=False,verbose=False):
             d = (box[1][1] - y1)
 
             cv2.rectangle(frame_copy, (a, b), (c, d), (0, 255, 0))
-            #cv2.putText(frame_copy, label[i], (box[0][0]-x1, box[0]
+            # cv2.putText(frame_copy, label[i], (box[0][0]-x1, box[0]
             #                                   [1]-y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             plt.imshow(frame_copy)
             plt.show()
     return bbox
 
-#Python/Project/data/YOLOv3/yolov3.cfg data/YOLOv3/yolov3.weights
+# Python/Project/data/YOLOv3/yolov3.cfg data/YOLOv3/yolov3.weights
+
+
 def load_net(weights_location='data/YOLOv3/yolov3.weights', config_location='data/YOLOv3/yolov3.cfg', names_location='data/YOLOv3/yolov3_classes.txt'):
     net = cv2.dnn.readNet(weights_location, config_location)
     #net = cv2.dnn_DetectionModel(config_location, weights_location)
@@ -255,7 +261,7 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
     return bbox, label, confidence
 
 
-def get_boxes_svm(frame=None, visualize=False, verbose=False,method=1, point=None):
+def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=None):
 
     if point[3] < 15:
         frame_size = 500
@@ -295,17 +301,20 @@ def get_boxes_svm(frame=None, visualize=False, verbose=False,method=1, point=Non
         x2 = int(round(point[0])) + ((frame_size) // 1.5)
         y2 = int(round(point[1])) + ((frame_size) // 3)
         frame = frame.crop((x1, y1, x2, y2))
-        
-        if method == 0: overlap = 0.09
-        else: overlap = 0.10
+
+        if method == 0:
+            overlap = 0.09
+        else:
+            overlap = 0.10
         frame = np.array(frame)
         sliding_window_1 = get_window_slides(
             frame, window_size_1, overlap=overlap)
-        #sliding_window_1 = get_window_slides(
-            #frame, window_size_2, overlap=0.10)
-        sliding_windows = sliding_window_1# + sliding_window_2
+        # sliding_window_1 = get_window_slides(
+        # frame, window_size_2, overlap=0.10)
+        sliding_windows = sliding_window_1  # + sliding_window_2
 
-        vehicle_slides = predict_vehicles_slides_2(frame, method, sliding_windows)
+        vehicle_slides = predict_vehicles_slides_2(
+            frame, method, sliding_windows)
         #vehicle_slides = predict_vehicles_slides(frame, sliding_windows)
         proba_frame, calculated_slides = get_calculated_box(
             frame.shape, vehicle_slides)
@@ -337,9 +346,9 @@ def get_boxes_svm(frame=None, visualize=False, verbose=False,method=1, point=Non
         return final_boxes
 
 
-def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2,0), visualize_frames=False, visualize_sub_frames=False,verbose=False):
+def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visualize_frames=False, visualize_sub_frames=False, verbose=False):
     p, color, frame = custom_map_pointcloud_to_image(
-        nusc, pointsensor_token, camera_token,verbose)
+        nusc, pointsensor_token, camera_token, verbose)
     filtered_col = p[[0, 1, 18, 19, 20, 21], :]
     color = np.array(color).reshape(1, color.shape[0])
     new_p = np.append(filtered_col, color, axis=0)
@@ -373,25 +382,29 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2,0), visua
     boxes = []
     box = []
     if verbose:
-            print('     Total number of point regions to be verified:', len(averages))
+        print('     Total number of point regions to be verified:', len(averages))
 
     if method[0] <= 1:
         if (method[1]) == 1:
             pool = multiprocessing.Pool()
-            func = partial(get_boxes_svm, frame,visualize_sub_frames, verbose,method[0])
+            func = partial(get_boxes_svm, frame,
+                           visualize_sub_frames, verbose, method[0])
             boxes = (pool.map(func, averages))
             pool.close()
             pool.join()
-        else:    
+        else:
             for average in averages:
-               boxes.append(get_boxes_svm(frame,visualize_sub_frames,verbose, method[0],average))
+                boxes.append(get_boxes_svm(
+                    frame, visualize_sub_frames, verbose, method[0], average))
     elif method[0] == 2:
         for average in averages:
-            boxes.append(get_boxes_yolo(frame, method[0], average, visualize_sub_frames,verbose))
+            boxes.append(get_boxes_yolo(
+                frame, method[0], average, visualize_sub_frames, verbose))
     else:
-        boxes.append(get_boxes_yolo(frame, method[0], (0, 0, 0, 0), visualize_sub_frames,verbose))
+        boxes.append(get_boxes_yolo(
+            frame, method[0], (0, 0, 0, 0), visualize_sub_frames, verbose))
     frame = np.array(frame)
-    
+
     for i, bbox in enumerate(boxes):
         if (bbox != None and len(bbox) > 0):
             for j in range(len(bbox)):
@@ -423,12 +436,13 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2,0), visua
                             # plt.show()
     if verbose:
         print('     Total number of vehicle regions predicted in frame:', len(box))
-    marked_boxes=[]
+    marked_boxes = []
     for rect in box:
         cv2.rectangle(frame, (rect[0][0], rect[0][1]), (rect[2][0], rect[2][1]), color=(
             0, 255, 0), thickness=2)
-        marked_boxes.append(((rect[0][0], rect[0][1]), (rect[2][0], rect[2][1])))
-        
+        marked_boxes.append(
+            ((rect[0][0], rect[0][1]), (rect[2][0], rect[2][1])))
+
     if visualize_frames:
         # plt.imshow(frame)
         # plt.show()
@@ -437,7 +451,6 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2,0), visua
         points_in_image(p, np.array(averages)[:, :2], color, frame)
 
     return frame, box
-
 
 
 def points_in_image(points, averages, colouring, frame):
@@ -522,14 +535,17 @@ def check_box_area(box1, boxes, frame, visualize=False):
 def calculate_intersection(box_1, box_2):
     poly_1 = Polygon(box_1)
     poly_2 = Polygon(box_2)
-    intersection = poly_1.intersection(poly_2).area  # / poly_1.union(poly_2).area
+    intersection = poly_1.intersection(
+        poly_2).area  # / poly_1.union(poly_2).area
     return intersection
+
 
 def calculate_iou(box_1, box_2):
     poly_1 = Polygon(box_1)
     poly_2 = Polygon(box_2)
     iou = poly_1.intersection(poly_2).area / poly_1.union(poly_2).area
     return iou
+
 
 def get_window_slides(frame, window_size, overlap):
     assert frame.shape[1] > window_size
@@ -554,21 +570,18 @@ def get_window_slides(frame, window_size, overlap):
         else:
             break
     return window_slides
-def bin_spatial(img, size=(32, 32)):
-    color1 = cv2.resize(img[:,:,0], size).ravel()
-    color2 = cv2.resize(img[:,:,1], size).ravel()
-    color3 = cv2.resize(img[:,:,2], size).ravel()
-    return np.hstack((color1, color2, color3))
-                        
-def color_hist(img, nbins=32):    #bins_range=(0, 256)
-    # Compute the histogram of the color channels separately
-    channel1_hist = np.histogram(img[:,:,0], bins=nbins)
-    channel2_hist = np.histogram(img[:,:,1], bins=nbins)
-    channel3_hist = np.histogram(img[:,:,2], bins=nbins)
-    # Concatenate the histograms into a single feature vector
-    hist_features = np.concatenate((channel1_hist[0], channel2_hist[0], channel3_hist[0]))
-    # Return the individual histograms, bin_centers and feature vector
-    return hist_features
+
+
+def get_other_features(sub_frame):
+    rs_bins = []
+    sf_hist = []
+    for i in range(3):
+        rs_bins.append(cv2.resize(sub_frame[:, :, i], (32, 32)).ravel())
+        sf_hist.append(np.histogram(sub_frame[:, :, i], bins=32))
+    rs_bins = np.concatenate((rs_bins[0], rs_bins[1], rs_bins[2]))
+    sf_hist = np.concatenate((sf_hist[0][0], sf_hist[1][0], sf_hist[2][0]))
+    return rs_bins, sf_hist
+
 
 def frame_slides_canvas(frame, slide_windows):
     frame_copy = np.array(frame)
@@ -579,24 +592,25 @@ def frame_slides_canvas(frame, slide_windows):
             slide_window[1][0], slide_window[1][1]), (color), 1)
     return frame_copy
 
-def predict_vehicles_slides_2(frame,method, slide_windows):
+
+def predict_vehicles_slides_2(frame, method, slide_windows):
     vehicle_slides = []
-    global svc,xscaler
+    global svc, xscaler
     for slide_window in slide_windows:
-        
+
         sub_frame = frame[slide_window[0][1]: slide_window[1]
                           [1], slide_window[0][0]: slide_window[1][0], :]
         sub_frame = cv2.cvtColor(sub_frame, cv2.COLOR_RGB2YUV)
         sub_frame = cv2.resize(sub_frame, (64, 64))
-        
-        if method ==0:
-            hog_feat = get_hog_features(sub_frame,15,(8,8))
-            spatial_features = bin_spatial(sub_frame, size=(32,32))
-            hist_features = color_hist(sub_frame, nbins=32)
-            test_stacked = np.hstack((spatial_features, hist_features, hog_feat[0])).reshape(1, -1)
-            #test_stacked = np.hstack((spatial_features, hog_feat[0])).reshape(1, -1)
-            hog_feat_2=xscaler.transform(test_stacked)
-            # prediction=classifier1.predict(j)
+
+        if method == 0:
+            hog_feat = get_hog_features(sub_frame, 15, (8, 8))
+            rs_bins, sf_hist = get_other_features(sub_frame)
+            test_stacked = np.hstack(
+                (rs_bins, sf_hist, hog_feat[0])).reshape(1, -1)
+            #test_stacked = np.hstack((rs_bins, hog_feat[0])).reshape(1, -1)
+            hog_feat_2 = xscaler.transform(test_stacked)
+            # prediction=svc.predict(j)
             prediction = svc.predict(hog_feat_2)
         else:
             hog_feat = get_hog_features(sub_frame)
@@ -605,17 +619,18 @@ def predict_vehicles_slides_2(frame,method, slide_windows):
             vehicle_slides.append(slide_window)
     return vehicle_slides
 
+
 def predict_vehicles_slides(frame, slide_windows):
     vehicle_slides = []
     global svc
     for slide_window in slide_windows:
-        
+
         sub_frame = frame[slide_window[0][1]: slide_window[1]
                           [1], slide_window[0][0]: slide_window[1][0], :]
         sub_frame = cv2.cvtColor(sub_frame, cv2.COLOR_RGB2YUV)
         sub_frame = cv2.resize(sub_frame, (64, 64))
         hog_feat = get_hog_features(sub_frame)
-        # prediction=classifier1.predict(j)
+        # prediction=svc.predict(j)
         prediction = svc.predict(hog_feat)
         if prediction == 1:
             vehicle_slides.append(slide_window)
@@ -647,7 +662,7 @@ def get_calculated_box(frame_size, slide_windows):
     proba_frame, n_vehicles = label(proba_frame)
     calculated_slides = []
     detected_slides = find_objects(proba_frame)
-    
+
     for y_row, x_col in detected_slides:
         calculated_slides.append(
             ((x_col.start, y_row.start), (x_col.stop, y_row.stop)))
@@ -667,52 +682,70 @@ def save_video(frames, filename, fps, size):
     video.release()
     print(('Saved Video {} successfully').format(filename))
 
-def get_annotations(nusc,scene_annotations, cam_token,visualize=False,verbose=False):
-    annotated_boxes=[]
+
+def get_annotations(nusc, scene_annotations, cam_token, visualize=False, verbose=False):
+    annotated_boxes = []
     for ann_token in scene_annotations:
-            cam = cam_token
-            ann_record = nusc.get('sample_annotation', ann_token)
-            
-            if len(ann_record['attribute_tokens']) > 0 and ann_record['category_name'] in ['vehicle.car', 'vehicle.truck']:
-                att_token = ann_record['attribute_tokens'][0]
-                att_record = nusc.get('attribute', att_token)
-                if(att_record['name'] in ['vehicle.moving']):#,'vehicle.stopped']):
-                    data_path, boxes, camera_intrinsic = nusc.get_sample_data(cam_token, selected_anntokens=[ann_token])
-                    
-                    for box in boxes:
-                        
-                        corners = view_points(box.corners(), view=camera_intrinsic, normalize=True)[:2, :]
-                        mins = corners.T.min(axis=0)
-                        maxs = corners.T.max(axis=0)
-                        a = int(mins[0])
-                        b = int(mins[1])
-                        c = int(maxs[0])
-                        d = int(maxs[1])
-                        annotated_boxes.append([[a, b], [c, b], [c, d], [a, d]])
-                        if visualize:
-                            if verbose:
-                                print('     Visualising annotations')
-                            frame = Image.open(data_path)
-                            frame_copy = np.array(frame)   
-                            cv2.rectangle(frame_copy, (a,b), (c,d), (0, 255, 0), 2)
-                            plt.imshow(frame_copy)
-                            plt.show()
+        cam = cam_token
+        ann_record = nusc.get('sample_annotation', ann_token)
+
+        if len(ann_record['attribute_tokens']) > 0 and ann_record['category_name'] in ['vehicle.car', 'vehicle.truck']:
+            att_token = ann_record['attribute_tokens'][0]
+            att_record = nusc.get('attribute', att_token)
+            # ,'vehicle.stopped']):
+            if(att_record['name'] in ['vehicle.moving']):
+                data_path, boxes, camera_intrinsic = nusc.get_sample_data(
+                    cam_token, selected_anntokens=[ann_token])
+
+                for box in boxes:
+
+                    corners = view_points(
+                        box.corners(), view=camera_intrinsic, normalize=True)[:2, :]
+                    mins = corners.T.min(axis=0)
+                    maxs = corners.T.max(axis=0)
+                    a = int(mins[0])
+                    b = int(mins[1])
+                    c = int(maxs[0])
+                    d = int(maxs[1])
+                    annotated_boxes.append([[a, b], [c, b], [c, d], [a, d]])
+                    if visualize:
+                        if verbose:
+                            print('     Visualising annotations')
+                        frame = Image.open(data_path)
+                        frame_copy = np.array(frame)
+                        cv2.rectangle(frame_copy, (a, b),
+                                      (c, d), (0, 255, 0), 2)
+                        plt.imshow(frame_copy)
+                        plt.show()
     return annotated_boxes
 
-def get_accuracy(marked_boxes, annotated_boxes, frame,visualize= False, verbose = False):
-    
-    tp =fp =fn =0
+
+def str2bool(v):
+    # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse/31347222
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def get_accuracy(marked_boxes, annotated_boxes, frame, visualize=False, verbose=False):
+
+    tp = fp = fn = 0
     iou_list = []
     average = 0.5
     for annotated_box in annotated_boxes:
         frame_copy = np.copy(frame)
         max_iou = -1
-        pos =-1
+        pos = -1
         for i, marked_box in enumerate(marked_boxes):
             frame_copy2 = np.copy(frame_copy)
             iou = calculate_iou(marked_box, annotated_box)
-            if iou > max_iou and iou>0.5 :
-                max_iou = iou                
+            if iou > max_iou and iou > 0.5:
+                max_iou = iou
                 pos = i
             """ cv2.rectangle(frame_copy2, (marked_box[0][0], marked_box[0][1]), (marked_box[2][0], marked_box[2][1]), color=(
             255, 0, 0), thickness=2)
@@ -729,42 +762,43 @@ def get_accuracy(marked_boxes, annotated_boxes, frame,visualize= False, verbose 
         if pos == -1:
             fn = fn + 1
         #print("Correct prediction",tp,"Wrong prediction",fp,"Not Predicted",fn)
-        if max_iou >=-1:   
+        if max_iou >= -1:
             if visualize:
                 if verbose:
                     print('         Visualising IOU taken vs actual')
                 cv2.rectangle(frame_copy, (marked_boxes[pos][0][0], marked_boxes[pos][0][1]), (marked_boxes[pos][2][0], marked_boxes[pos][2][1]), color=(
-                255, 0, 0), thickness=2)
+                    255, 0, 0), thickness=2)
                 cv2.rectangle(frame_copy, (annotated_box[0][0], annotated_box[0][1]), (annotated_box[2][0], annotated_box[2][1]), color=(
-                0, 255, 0), thickness=2)
-                cv2.putText(frame_copy, str(round(max_iou,3)), (marked_boxes[pos][0][0], marked_boxes[pos][0]
-                                                   [1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    0, 255, 0), thickness=2)
+                cv2.putText(frame_copy, str(round(max_iou, 3)), (marked_boxes[pos][0][0], marked_boxes[pos][0]
+                                                                 [1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 plt.imshow(frame_copy)
                 plt.show()
             iou_list.append(max_iou)
 
-    if tp>0 or fp>0:
+    if tp > 0 or fp > 0:
         precision = tp / (len(marked_boxes))
     else:
         precision = 0
-    if tp>0 or fn>0:    
+    if tp > 0 or fn > 0:
         recall = tp / (tp + fn)
     else:
         recall = 0
-    if len(iou_list)> 0.1:
-        average =  round(sum(iou_list) / len(iou_list) ,3)
-    #if verbose:
+    if len(iou_list) > 0.1:
+        average = round(sum(iou_list) / len(iou_list), 3)
+    # if verbose:
     #    print('     Average IoU is:', average)
-    
+
     return precision, recall, tp, fp
 
-def run_detection_system(method=(2,0), validate_results=False,visualize_frames=False,visualize_sub_frames=False,verbose=False):
+
+def run_detection_system(method=(2, 0), validate_results=False, visualize_frames=False, visualize_sub_frames=False, verbose=False):
     location = 'data/v1.0-mini'
     nusc = NuScenes(version='v1.0-mini', dataroot=location, verbose=False)
     pointsensor_channel = 'RADAR_FRONT'
     camera_channel = 'CAM_FRONT'
     frames = []
-    global net, output_layers, classes,svc,xscaler
+    global net, output_layers, classes, svc, xscaler
     if method[0] > 1:
         net, output_layers, classes = load_net()
         if verbose:
@@ -772,7 +806,7 @@ def run_detection_system(method=(2,0), validate_results=False,visualize_frames=F
         filename = 'YOLOv3_'
     else:
         if method[0] == 0:
-            svc,xscaler = load_svc_2()
+            svc, xscaler = load_svc_2()
         else:
             svc = load_svc()
         if verbose:
@@ -780,14 +814,14 @@ def run_detection_system(method=(2,0), validate_results=False,visualize_frames=F
         filename = 'HOG_SVM_'
     t0 = time.time()
     for scene in nusc.scene:
-        if verbose:
-            print('Scene description: ',scene['description'])
+        # if verbose:
+        #    print('Scene description: ',scene['description'])
         first_sample_token = scene['first_sample_token']
         last_sample_token = scene['last_sample_token']
         check_token = first_sample_token
-        pre =[]
-        rec =[]
-        
+        pre = []
+        rec = []
+
         while (check_token != '') and scene['name'] == 'scene-0061':
             if verbose:
                 print('     -------------------New-Scene----------------')
@@ -795,36 +829,65 @@ def run_detection_system(method=(2,0), validate_results=False,visualize_frames=F
             pointsensor_token = sample_record['data'][pointsensor_channel]
             camera_token = sample_record['data'][camera_channel]
             marked_frames, marked_boxes = get_marked_frames(
-                nusc, pointsensor_token, camera_token, method, visualize_frames, visualize_sub_frames,verbose)
+                nusc, pointsensor_token, camera_token, method, visualize_frames, visualize_sub_frames, verbose)
             frames.append(marked_frames)
             if validate_results:
                 scene_annotations = sample_record['anns']
-                annotated_boxes = get_annotations(nusc,scene_annotations,camera_token)
+                annotated_boxes = get_annotations(
+                    nusc, scene_annotations, camera_token)
                 cam = nusc.get('sample_data', camera_token)
                 frame = Image.open(osp.join(nusc.dataroot, cam['filename']))
-                precision,recall,trueP,trueN = get_accuracy(marked_boxes, annotated_boxes, frame, visualize_sub_frames, verbose)
+                precision, recall, trueP, trueN = get_accuracy(
+                    marked_boxes, annotated_boxes, frame, visualize_sub_frames, verbose)
                 pre.append(precision)
                 rec.append(recall)
             check_token = sample_record['next']
-        
-        if verbose and validate_results and scene['name'] == 'scene-0061':
+
+        if validate_results and scene['name'] == 'scene-0061':
             print('Avg Precision is:', sum(pre) / (len(pre)))
-            print('Avg Recall is:',sum(rec)/(len(rec)))
+            print('Avg Recall is:', sum(rec)/(len(rec)))
             #getmap(pre, rec)
     t1 = time.time()
-    t =t1-t0
-    print('Time for ',filename,'is:',t)
+    t = t1-t0
+    print('Time for ', filename, 'is:', t)
     #save_video(frames, filename, 10, frames[0].shape[:2])
 
-print("-------------------SVM slower with Parallel---------------------")
-run_detection_system((0, 1), True, False,verbose=True)
-print("-------------------SVM slower without Parallel---------------------")
-#run_detection_system((0, 0), True, False,verbose=True)
-print("-------------------SVM Faster with Parallel---------------------")
-#run_detection_system((1, 1), True, False,verbose=True)
-print("-------------------SVM Faster without Parallel---------------------")
-run_detection_system((1, 0), True, False,verbose=True)
-print("-------------------YOLO modified---------------------")
-run_detection_system((2, 0), True, False,False,verbose=True)
-print("-------------------YOLO orginal---------------------")
-run_detection_system((3, 0), True, False,False,verbose=True)
+
+def validate_args(args):
+    try:
+        if type(args.c) == int and type(args.p) == int and args.c >= 0 and args.c <= 3 and args.p >= 0 and args.p <= 1 and args.c > 1 and args.p > 0:
+            print(
+                'No Parallel processing required for YOLOv3 version. Setting it to default')
+            args.p = 0
+        else:
+            raise ValueError(
+                'Use -h for help. You have entered a wrong integer input')
+        if type(args.t) != bool and type(args.f) != bool and type(args.s) != bool and type(args.v) != bool:
+            raise ValueError(
+                'Use -h for help. You have entered a wrong boolean input')
+
+    except Exception as error:
+        print('Caught this error: ' + repr(error))
+        exit()
+    return args
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', type=int, default=2,
+                        help="0 = Slow SVM, 1 = Fast SVM, 2 = Modified YOLO, 3 = Orginal YOLO")
+    parser.add_argument('-p', type=int, default=0,
+                        help="0 = For normal processing, 1 = For parallel processing")
+    parser.add_argument('-t', type=str2bool, nargs='?',
+                        const=True, default=False, help="Validate results")
+    parser.add_argument('-f', type=str2bool, nargs='?',
+                        const=True,  default=False, help="Visualize Frames")
+    parser.add_argument('-s', type=str2bool, nargs='?',
+                        const=True,  default=False, help="Visualize Sub-Frames")
+    parser.add_argument('-v', type=str2bool, nargs='?',
+                        const=True,  default=False, help="Verbose")
+
+    args = parser.parse_args()
+    args = validate_args(args)
+
+    run_detection_system((args.c, args.p), args.t, args.f, args.s, args.v)
