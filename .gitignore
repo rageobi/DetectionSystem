@@ -8,3 +8,4 @@ HOG_SVM_721.avi
 *.pcd.bin
 data/v1.0-mini/*
 .vscode/settings.json
+__pycache__/*
