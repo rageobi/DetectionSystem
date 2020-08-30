@@ -11,7 +11,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 from skimage.feature import hog
-#import matplotlib.image as mpimg
 from scipy.ndimage.measurements import label
 from scipy.ndimage import find_objects
 from nuscenes.nuscenes import NuScenes
@@ -30,6 +29,7 @@ import pickle
 import time
 from shapely.geometry import Polygon
 
+#golbal variables
 svc = None
 net = None
 output_layers = None
@@ -38,21 +38,21 @@ c_slide = None
 xscaler = None
 
 
-def load_svc():
-    filename = "data/svc_hope.p"
-    svc = pickle.load(open(filename, 'rb'))
-    return svc
-
-
-def load_svc_2():
-    filename = "data/svmhopeful.p"
-    svc = pickle.load(open(filename, 'rb'))
-    filename = "data/xscalerhopeful.p"
-    xscaler = pickle.load(open(filename, 'rb'))
-    return svc, xscaler
-
-
 def calculation_of_radar_data(radar):
+    """
+        Function to extract features from radar pointcloud data
+
+        Parameters
+        ----------
+        :param radar: Pointcloud data
+
+        Returns
+        ----------
+        point_dist -> array: Distance magnitude of the point from sensor
+        point_phi -> array : Azimuth of the point from sensor
+        point_rad_velocity -> array : Compensated radial velocity of the point
+        velocity_phi -> array : Azimuth of the radial velocity vectors
+    """
     x_points = radar.points[0]
     y_points = radar.points[1]
     z_points = radar.points[2]
@@ -74,6 +74,22 @@ def custom_map_pointcloud_to_image(nusc,
                                    camera_token,
                                    verbose=False):
     # Inspired from the NuScenes Dev-Kit
+    """
+        Helper function to retrieve the image coordinate transformed point coordinates, clusters mappings for the points and the image frame.
+
+        Parameters
+        ----------
+        :param nusc: Nuscenes object
+        :param pointsensor_token: Point sensor token
+        :param cam_token: Camera sensor token
+        :param verbose: Boolean variable to display console logs
+
+        Returns
+        ----------
+        points -> ndarray: Points data transformed to Image coordinates
+        coloring -> list : Cluster associated for points
+        im -> PIL Image : Image frame for the instance
+    """
     # rpc.abidefaults()
     rpc.disable_filters()
     cam = nusc.get('sample_data', camera_token)
@@ -158,6 +174,19 @@ def custom_map_pointcloud_to_image(nusc,
 
 
 def appendtoclusterlist(x, y):
+    """
+        Append points to the Clusterlist
+
+        Parameters
+        ----------
+        :param x: X cordinate of the clusterlist
+        :param y: Y cordinate of the clusterlist
+
+        Returns
+        --------
+        cl -> ClusterLists : ClusterList of all the points provided
+
+    """
     cl = ClusterLists()
     for data in zip(x, y):
         cl.append(Cluster(data[0], data[1]))
@@ -165,7 +194,23 @@ def appendtoclusterlist(x, y):
 
 
 def get_boxes_yolo(frame, method, point, visualize=False, verbose=False):
+    """
+        Helper function to predict the vehicle box coordinates through YOLO net approach 
 
+        Parameters
+        ----------
+        :param frame: Image frame which needs to be predicted
+        :param method: int which specifies the classifier type. (2 for Modified YOLOv3 and 3 for Original YOLOv3)
+        :param point: The point data of the current frame instance
+        :param visualize: Boolean variable to check if user needs to visualize region frames which are proposed and marked
+        :param verbose: Boolean variable to display console logs
+
+
+        Returns
+        --------
+        bbox -> list : Vehicle detected box coordinates
+
+    """
     if method == 2:
         #frame_copy = np.copy(frame)
         if point[3] < 15:
@@ -202,10 +247,56 @@ def get_boxes_yolo(frame, method, point, visualize=False, verbose=False):
             plt.show()
     return bbox
 
+
+def load_svc():
+    """
+        Function to load trained model for the MODEL B approach
+
+        Returns
+        ----------
+        svc : The SVC model
+    """
+    filename = "data/svc_hope.p"
+    svc = pickle.load(open(filename, 'rb'))
+    return svc
+
+
+def load_svc_2():
+    """
+        Function to load trained model for the MODEL A approach
+
+        Returns
+        ----------
+        svc : The SVC model
+        xscaler : The fitted scaler value
+    """
+    filename = "data/svmhopeful.p"
+    svc = pickle.load(open(filename, 'rb'))
+    filename = "data/xscalerhopeful.p"
+    xscaler = pickle.load(open(filename, 'rb'))
+    return svc, xscaler
+
+
 # Python/Project/data/YOLOv3/yolov3.cfg data/YOLOv3/yolov3.weights
 
 
 def load_net(weights_location='data/YOLOv3/yolov3.weights', config_location='data/YOLOv3/yolov3.cfg', names_location='data/YOLOv3/yolov3_classes.txt'):
+    """
+        Helper function to load the YOLO network
+
+        Parameters
+        ----------
+        :param weights_location: Network weights file location
+        :param config_location: Network conifg file location
+        :param names_location: Network classes file location
+
+        Returns
+        --------
+        net -> dnn : Loaded Network
+        output_layers -> list : Network layers
+        classes -> list : Class names
+
+    """
     net = cv2.dnn.readNet(weights_location, config_location)
     #net = cv2.dnn_DetectionModel(config_location, weights_location)
     classes = []
@@ -219,6 +310,21 @@ def load_net(weights_location='data/YOLOv3/yolov3.weights', config_location='dat
 
 def get_yolo_detections(frame, primary_origin=(0, 0)):
     # Reference - https://pysource.com/2019/06/27/yolo-object-detection-using-opencv-with-python/
+    """
+        Function to predict boxes through the loaded YOLO network
+
+        Parameters
+        ----------
+        :param frame: Image frame which needs to be predicted
+        :param primary_origin: Tuple with starting coordinates of image. (0,0) for uncropped image. But if region of the frame is sent, pass the starting coordinates of the region wrt to orginal uncropped frame
+
+        Returns
+        --------
+        bbox -> list : Predicted bounding boxes
+        label -> list : Predicted box labels
+        confidence -> list : Predicted boxes confidence scores
+
+    """
     global net, output_layers, classes
     height, width, channels = frame.shape
     blob = cv2.dnn.blobFromImage(
@@ -262,7 +368,22 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
 
 
 def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=None):
+    """
+        Helper function to predict the vehicle box coordinates through SVM classifier approach 
 
+        Parameters
+        ----------
+        :param frame: Image frame which needs to be predicted
+        :param visualize: Boolean variable to check if user needs to visualize region frames which are proposed and marked
+        :param verbose: Boolean variable to display console logs
+        :param method: int which specifies the classifier type. (1 for MODEL B and 0 for MODEL A)
+        :param point: The point data of the current frame instance
+
+        Returns
+        --------
+        final_boxes -> list : Vehicle detected box coordinates
+
+    """
     if point[3] < 15:
         frame_size = 500
         #frame_size_y = 500
@@ -347,6 +468,26 @@ def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=No
 
 
 def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visualize_frames=False, visualize_sub_frames=False, verbose=False):
+    """
+        Main helper function which handles the calls to other helper function. Gets all the vehicle predicition boxes and the box marked frames. 
+
+        Parameters
+        ----------
+        :param nusc: Nuscenes object
+        :param pointsensor_token: Radar sensor token
+        :param cam_token: Camera sensor token
+        :param method: Tuple which specifies the (classifier,isParallel)
+        :param validate_results: Boolean variable to check if user needs to validate results
+        :param visualize_frames: Boolean variable to check if user needs to visualize fully marked image frames
+        :param visualize_sub_frames: Boolean variable to check if user needs to visualize region frames which are proposed and marked
+        :param verbose: Boolean variable to display console logs
+
+        Returns
+        --------
+        frame -> ndarray : Marked image frames
+        box -> list : Vehicle detected box coordinates
+
+    """
     p, color, frame = custom_map_pointcloud_to_image(
         nusc, pointsensor_token, camera_token, verbose)
     filtered_col = p[[0, 1, 18, 19, 20, 21], :]
@@ -424,8 +565,11 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
                             #cv2.rectangle(frame, (a, b), (c, d), color=(0, 255, 0), thickness=2)
                         else:
                             global c_slide
-                            b1_area, b2_area = get_box_area(
-                                c_slide, [[a, b], [c, b], [c, d], [a, d]])
+                            # b1_area, b2_area = get_box_area(
+                            #    c_slide, [[a, b], [c, b], [c, d], [a, d]])
+                            b1_area = get_box_area(c_slide)
+                            b2_area = get_box_area(
+                                [[a, b], [c, b], [c, d], [a, d]])
                             if b2_area > b1_area:
                                 box.remove(c_slide)
                                 box.append([[a, b], [c, b], [c, d], [a, d]])
@@ -454,6 +598,17 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
 
 
 def points_in_image(points, averages, colouring, frame):
+    """
+        Function which can help in scattering the points over frame and visualize information of the points on hover.
+
+        Parameters
+        ----------
+        :param points: Pointcloud data
+        :param averages: Clustered and averaged points which are considered for region proposal
+        :param colouring: Coloring of the points which are to be scattered. n_points should be equal to n_coloring values
+        :param frame: The image frame on which points are to be scattered
+    """
+
     frame_copy = np.copy(frame)
     fig, ax = plt.subplots()
     sc = ax.scatter(points[0, ], points[1, ], c=colouring[0], s=8, alpha=0.5)
@@ -499,17 +654,43 @@ def points_in_image(points, averages, colouring, frame):
     plt.show()
 
 
-def get_box_area(box_1, box_2):
-    poly_1 = Polygon(box_1)
-    poly_2 = Polygon(box_2)
-    return poly_1.area, poly_2.area
+def get_box_area(box):
+    """
+        Helper function to calculate areas of box
+        Parameters
+        ----------
+        :param box: Coordinates for first shape. Sample for rectangle [[a, b], [c, b], [c, d], [a, d]]
+
+        Returns
+        ----------
+        box.area-> GEOSimpl : Area of both the boxes
+    """
+    return Polygon(box).area
 
 
 def check_box_area(box1, boxes, frame, visualize=False):
+    """
+        Function checks if box1 is already present in the list of boxes. A box is considered to be present if 
+        intersection area is greater than 85% for box which has been added with the one which is already present. 
+        If Box1 has greater area, it is saved in global variable for replacing the other box which it intersected with.
+
+        Parameters
+        ----------
+        :param box_1: Box cordinates which needs to checked if present already
+        :param boxes: All the boxes which have been added prior to box_1 instance
+        :param frame: The image frame over which the box rectangles need to visualised
+        :param visualize: Boolean variable to check if user needs to visualize fully marked image frames 
+
+        Returns
+        ----------
+        bool : If present already or not
+    """
     for box2 in boxes:
         if not (box2 == box1):
             intersection = calculate_intersection(box1, box2)
-            a1, a2 = get_box_area(box1, box2)
+            #a1, a2 = get_box_area(box1, box2)
+            a1 = get_box_area(box1)
+            a2 = get_box_area(box2)
             if intersection < 0.15*a1 and intersection < 0.15*a2:
                 continue
             else:
@@ -533,6 +714,17 @@ def check_box_area(box1, boxes, frame, visualize=False):
 
 
 def calculate_intersection(box_1, box_2):
+    """
+        Helper function to calculate Intersection over Union for two shapes
+        Parameters
+        ----------
+        :param box_1: Coordinates for first shape. Sample for rectangle [[a, b], [c, b], [c, d], [a, d]]
+        :param box_2: Coordinates for second shape. Sample for rectangle [[a, b], [c, b], [c, d], [a, d]]
+
+        Returns
+        ----------
+        intersection -> list : Area of Intersection between two objects
+    """
     poly_1 = Polygon(box_1)
     poly_2 = Polygon(box_2)
     intersection = poly_1.intersection(
@@ -541,6 +733,17 @@ def calculate_intersection(box_1, box_2):
 
 
 def calculate_iou(box_1, box_2):
+    """
+        Helper function to calculate Intersection over Union for two shapes
+        Parameters
+        ----------
+        :param box_1: Coordinates for first shape. Sample for rectangle [[a, b], [c, b], [c, d], [a, d]]
+        :param box_2: Coordinates for second shape. Sample for rectangle [[a, b], [c, b], [c, d], [a, d]]
+
+        Returns
+        ----------
+        iou -> list : IOU value ranging between 0 to 1
+    """
     poly_1 = Polygon(box_1)
     poly_2 = Polygon(box_2)
     iou = poly_1.intersection(poly_2).area / poly_1.union(poly_2).area
@@ -548,6 +751,19 @@ def calculate_iou(box_1, box_2):
 
 
 def get_window_slides(frame, window_size, overlap):
+    """
+        Helper function to retrieve window co-ordinates for an image frame
+
+        Parameters
+        ----------
+        :param frame: The image frame
+        :param window_size: Size of windows which need to be extracted
+        :param overlap: Overlapping which a window can have over other (0 -1) 
+
+        Returns
+        ----------
+        window_slides -> list : List of window box coordinates
+    """
     assert frame.shape[1] > window_size
     window_slides = []
     # print(frame.shape[0],frame.shape[1],window_size)
@@ -573,6 +789,18 @@ def get_window_slides(frame, window_size, overlap):
 
 
 def get_other_features(sub_frame):
+    """
+        Feature extractor function to extract the resized image bins and channel based histogram extracted 
+
+        Parameters
+        ----------
+        :param sub_frame: The image frame
+
+        Returns
+        ----------
+        rs_bins -> list : Binned resized image stored as list
+        sf_hist -> list : The sub frame whose image channels features are extracted and stored as list
+    """
     rs_bins = []
     sf_hist = []
     for i in range(3):
@@ -584,6 +812,18 @@ def get_other_features(sub_frame):
 
 
 def frame_slides_canvas(frame, slide_windows):
+    """
+        Function to draw rectangles over image frame
+
+        Parameters
+        ----------
+        :param frame: The image frame  
+        :param slide_windows: All the windows boxes which are to be drawn over the image frame as rectangles
+
+        Returns
+        ----------
+        frame_copy -> ndarray : Image frame with rectangles drawn
+    """
     frame_copy = np.array(frame)
     for slide_window in slide_windows:
         color = (random.randint(0, 255), random.randint(
@@ -594,6 +834,20 @@ def frame_slides_canvas(frame, slide_windows):
 
 
 def predict_vehicles_slides_2(frame, method, slide_windows):
+    """
+        Function to predict all the windows with vehicle detections
+
+        Parameters
+        ----------
+        :param frame: The sub-frame image region  
+        :param method: Defines the SVM approach to follow. 0 for MODEL A approach and 1 for MODEL B approach
+        :param slide_windows: All the windows boxes drawn for the original image frame
+
+        Returns
+        ----------
+        vehicle_slides -> list : List of predicted vehicle boxes 
+    """
+
     vehicle_slides = []
     global svc, xscaler
     for slide_window in slide_windows:
@@ -621,6 +875,7 @@ def predict_vehicles_slides_2(frame, method, slide_windows):
 
 
 def predict_vehicles_slides(frame, slide_windows):
+    # Replaced this function with predict_vehicles_slides_2 function
     vehicle_slides = []
     global svc
     for slide_window in slide_windows:
@@ -638,6 +893,17 @@ def predict_vehicles_slides(frame, slide_windows):
 
 
 def get_hog_features(frame, orientations=9, pixels_per_cell=(16, 16), cells_per_block=(2, 2), visualize=False, feature_vector=True, multichannel=None):
+    """
+    Helper Function to call the hog feature extractor and return a single or two outputs based on visualize parameter
+
+        Parameters
+        ----------
+        Same as HOG from skimage module
+
+        Returns
+        ----------
+        Returns ravel list of normalized_blocks with hog features and its image if visualize param is set to True; Else returns just the former. 
+    """
     normalized_blocks = []
     if visualize:
         normalized_blocks, hog_image = hog(
@@ -652,6 +918,20 @@ def get_hog_features(frame, orientations=9, pixels_per_cell=(16, 16), cells_per_
 
 
 def get_calculated_box(frame_size, slide_windows):
+    """
+        Function to check for the most overlaps by predicted car regions give the final vehicle detection box
+
+        Parameters
+        ----------
+        :param frame_size: Image frame size 1600 x 900 for all nuscenes image frames
+        :param slide_windows: Sliding windows which are refined to vehicles predictions
+
+        Returns
+        ----------
+        proba_frame -> Tuple : Refined windows take labelled as ndarray
+        calculated_slides -> list : List of predicted vehicle boxes in Frame of size frame_size
+    """
+
     proba_frame = np.zeros((frame_size[0], frame_size[1]))
     for slide_window in slide_windows:
         proba_frame[slide_window[0][1]:slide_window[1][1],
@@ -673,6 +953,16 @@ def get_calculated_box(frame_size, slide_windows):
 
 
 def save_video(frames, filename, fps, size):
+    """
+        Function to save as video in .avi format
+
+        Parameters
+        ----------
+        :param frames: Takes in all the frames as list
+        :param filename: Name of the file
+        :param fps: Frames per second value
+        :param size: Size of image frames
+    """
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     filename = str('data/videos/')+filename+str(random.randint(0, 1000))+'.avi'
     video = cv2.VideoWriter(filename, fourcc, fps, (size[1], size[0]))
@@ -684,6 +974,21 @@ def save_video(frames, filename, fps, size):
 
 
 def get_annotations(nusc, scene_annotations, cam_token, visualize=False, verbose=False):
+    """
+        Function to get all the annotated object boxes
+
+        Parameters
+        ----------
+        :param nusc: Nuscenes object
+        :param scene_annotations: Scene annotation tokens
+        :param cam_token: Camera sensor token
+        :param visualize: Boolean variable to visualize all the annotated frame
+        :param verbose: Boolean variable to display console logs
+
+        Returns
+        ----------
+        list: Annotated boxes
+    """
     annotated_boxes = []
     for ann_token in scene_annotations:
         cam = cam_token
@@ -721,6 +1026,17 @@ def get_annotations(nusc, scene_annotations, cam_token, visualize=False, verbose
 
 
 def str2bool(v):
+    """
+        Returns boolean value for the string
+        Parameters
+        ----------
+        :param v: Value that needs to be checked and converted
+
+        Returns
+        ----------
+        Boolean value for the inputted value
+
+    """
     # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse/31347222
     if isinstance(v, bool):
         return v
@@ -733,6 +1049,23 @@ def str2bool(v):
 
 
 def get_accuracy(marked_boxes, annotated_boxes, frame, visualize=False, verbose=False):
+    """
+        Evaluation/Validation function to calculate the accuracy
+        Parameters
+        ----------
+        :param marked_boxes: list -> Marked object boxes for the image
+        :param annotated_boxes: list -> Annotated object boxes for the image
+        :param frame: PIL Image -> frame taken for detection in the current instance
+        :param visualize: Boolean variable to visualize object-by-object predicted vs annotated truth for comparison
+        :param verbose: Boolean variable to display console logs
+
+        Returns
+        ----------
+        Precision: float
+        Recall: float
+        True positives : int
+        False Positives : int
+    """
 
     tp = fp = fn = 0
     iou_list = []
@@ -792,13 +1125,27 @@ def get_accuracy(marked_boxes, annotated_boxes, frame, visualize=False, verbose=
     return precision, recall, tp, fp
 
 
-def run_detection_system(method=(2, 0), validate_results=False, visualize_frames=False, visualize_sub_frames=False, verbose=False):
+def run_detection_system(method=(2, 0), validate_results=False, visualize_frames=False, visualize_sub_frames=False, verbose=False, save_file=False):
+    """
+        Main function which takes uses all the helper functions to make the detections
+        Parameters
+        ----------
+        :param method: Tuple which specifies the (classifier,isParallel)
+        :param validate_results: Boolean variable to check if user needs to validate results
+        :param visualize_frames: Boolean variable to check if user needs to visualize fully marked image frames
+        :param visualize_sub_frames: Boolean variable to check if user needs to visualize region frames which are proposed and marked
+        :param verbose: Boolean variable to display console logs
+        :param save_file: Boolean variable to save detections to a file
+    """
+    # Load Nuscenes object and specify required channels
     location = 'data/v1.0-mini'
     nusc = NuScenes(version='v1.0-mini', dataroot=location, verbose=False)
     pointsensor_channel = 'RADAR_FRONT'
     camera_channel = 'CAM_FRONT'
     frames = []
     global net, output_layers, classes, svc, xscaler
+
+    # Load model
     if method[0] > 1:
         net, output_layers, classes = load_net()
         if verbose:
@@ -812,7 +1159,10 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
         if verbose:
             print('Loaded SVM predictor')
         filename = 'HOG_SVM_'
+
     t0 = time.time()
+
+    # Scenes iterator
     for scene in nusc.scene:
         # if verbose:
         #    print('Scene description: ',scene['description'])
@@ -828,9 +1178,13 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
             sample_record = nusc.get('sample', check_token)
             pointsensor_token = sample_record['data'][pointsensor_channel]
             camera_token = sample_record['data'][camera_channel]
+
+            # Get all the frames with detected moving vehicles
             marked_frames, marked_boxes = get_marked_frames(
                 nusc, pointsensor_token, camera_token, method, visualize_frames, visualize_sub_frames, verbose)
             frames.append(marked_frames)
+
+            # Validates the prediction based on  validate_result parameter
             if validate_results:
                 scene_annotations = sample_record['anns']
                 annotated_boxes = get_annotations(
@@ -846,19 +1200,28 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
         if validate_results and scene['name'] == 'scene-0061':
             print('Avg Precision is:', sum(pre) / (len(pre)))
             print('Avg Recall is:', sum(rec)/(len(rec)))
+            # Not using mAP for just one scene and hence commented the below function call
             #getmap(pre, rec)
     t1 = time.time()
     t = t1-t0
     print('Time for ', filename, 'is:', t)
-    #save_video(frames, filename, 10, frames[0].shape[:2])
+    # Save the detected frames as video
+    if save_file:
+        save_video(frames, filename, 10, frames[0].shape[:2])
 
 
 def validate_args(args):
+    """
+        Validates if the arguments passed are correct
+        :param args: Arguments retrieved through argsparser
+    """
+
     try:
-        if type(args.c) == int and type(args.p) == int and args.c >= 0 and args.c <= 3 and args.p >= 0 and args.p <= 1 and args.c > 1 and args.p > 0:
-            print(
-                'No Parallel processing required for YOLOv3 version. Setting it to default')
-            args.p = 0
+        if type(args.c) == int and type(args.p) == int and args.c >= 0 and args.c <= 3 and args.p >= 0 and args.p <= 1 :
+            if args.c > 1 and args.p > 0:
+                print(
+                    'No Parallel processing required for YOLOv3 version. Setting it to default')
+                args.p = 0
         else:
             raise ValueError(
                 'Use -h for help. You have entered a wrong integer input')
@@ -873,6 +1236,8 @@ def validate_args(args):
 
 
 if __name__ == "__main__":
+    #run_detection_system((2, 0), True,
+    #                     False, False, False, False)
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', type=int, default=2,
                         help="0 = Slow SVM, 1 = Fast SVM, 2 = Modified YOLO, 3 = Orginal YOLO")
@@ -885,9 +1250,12 @@ if __name__ == "__main__":
     parser.add_argument('-s', type=str2bool, nargs='?',
                         const=True,  default=False, help="Visualize Sub-Frames")
     parser.add_argument('-v', type=str2bool, nargs='?',
-                        const=True,  default=False, help="Verbose")
+                        const=True, default=False, help="Verbose")
+    parser.add_argument('-k', type=str2bool, nargs='?',
+                        const=True,  default=False, help="Save/keep detections to a file")
 
     args = parser.parse_args()
     args = validate_args(args)
 
-    run_detection_system((args.c, args.p), args.t, args.f, args.s, args.v)
+    run_detection_system((args.c, args.p), args.t,
+                         args.f, args.s, args.v, args.k)
