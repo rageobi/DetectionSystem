@@ -4,6 +4,7 @@ validation="false"
 visualiseFrames="false"
 visualisesubFrames="false"
 verbose="false"
+savefile="false"
 
 Help()
 {
@@ -20,12 +21,13 @@ Help()
    echo "f     Visualize/Display Frames"
    echo "s     Print software version and exit."
    echo "v     Verbose mode."
+   echo "k     Save/keep as file."
    echo
    echo "Default Option values -c 2 -p 0 -t False -f False -s False -v False"
    echo 
 }
 
-execall()
+ExecAll()
 {
 
 c=0
@@ -58,13 +60,13 @@ done
 
 
 }
-while getopts ":hrc:p:t:f:s:v:" option; do
+while getopts ":hrc:p:t:f:s:v:k:" option; do
   case $option in
     h ) 
     Help 
     exit;;
     r )
-    execall
+    ExecAll
     exit;;
     c ) classifier=${OPTARG:-2}
     ;;
@@ -78,7 +80,28 @@ while getopts ":hrc:p:t:f:s:v:" option; do
     ;;
     v ) verbose=${OPTARG:-False} 
     ;;
+    k ) savefile=${OPTARG:-False} 
+    ;;
   esac
 done
 
-python3 detectionsystem.py -c $classifier -p $parallel -t $validation -f $visualiseFrames -s $visualisesubFrames -v $verbose
+PrintValues()
+{
+   echo classifier 
+   echo $classifier 
+   echo parallel
+   echo $parallel
+   echo validation
+   echo $validation
+   echo visualiseFrames
+   echo $visualiseFrames
+   echo visualisesubFrames
+   echo $visualisesubFrames
+   echo verbose
+   echo $verbose
+   echo savefile
+   echo $savefile
+}
+#PrintValues
+
+python3 detectionsystem.py -c $classifier -p $parallel -t $validation -f $visualiseFrames -s $visualisesubFrames -v $verbose -k $savefile
