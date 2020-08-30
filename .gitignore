@@ -9,3 +9,4 @@ HOG_SVM_721.avi
 data/v1.0-mini/*
 .vscode/settings.json
 __pycache__/*
+data/detection_data.p
