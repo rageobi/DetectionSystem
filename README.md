@@ -1,6 +1,8 @@
 # DetectionSystem
 
-A system to detect vehicles that are moving vehicles which are predicted based on a series of empirical approach. The final detections are done using 3 approaches:
+A system to detect vehicles that are moving based on a series of empirical steps. 
+
+The final detections are done using 3 approaches:
 
    - Region proposal + Hand-engineered SVM with more features
    - Region proposal + Hand-engineered SVM with lesser features
@@ -10,7 +12,9 @@ A system to detect vehicles that are moving vehicles which are predicted based o
 ## run.sh
 
 A shell script to make execution of detectionsystem.py much simpler and abstracted.
-The help parameter can guide you through all the available options. 
+The help (-h) parameter can guide you through all the available options. 
+
+Sample:
 ```sh
 $ ./run.sh -h
 
@@ -32,14 +36,14 @@ Default Option values -c 2 -p 0 -t False -f False -s False -v False
 ```
 ## detectionsystem.py
 
-Main file which controls the detection and prediction of all the vehicles. Takes in the same arguments as `run.sh`, and has a similar default option values as mentioned earlier.  
+Main file which controls the detection and prediction of all the vehicles. Takes in the same arguments as `run.sh`, and has a similar default option values as mentioned.  
 
 ## densityscan.py
 
 Clustering module which can cluster features based on different feature distances
 
 ## SVCmodel.ipynb
-File containing the training of hand-engineered SVM classifier models (Fast and Slow) by varying the feature extraction techniques.
+File containing the training of hand-engineered SVM classifier models (Fast and Slow) which are done by varying the feature extraction techniques.
 
 ## requirements.txt
 
