@@ -19,7 +19,7 @@ Help()
    echo "p     0 = For normal processing, 1 = For parallel processing"
    echo "t     Validate/test results"
    echo "f     Visualize/Display Frames"
-   echo "s     Print software version and exit."
+   echo "s     Visualize/Display Sub-Frames/Regions"
    echo "v     Verbose mode."
    echo "k     Save/keep as file."
    echo
