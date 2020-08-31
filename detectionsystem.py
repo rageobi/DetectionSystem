@@ -29,7 +29,7 @@ import pickle
 import time
 from shapely.geometry import Polygon
 
-#golbal variables
+# golbal variables
 svc = None
 net = None
 output_layers = None
@@ -53,6 +53,7 @@ def calculation_of_radar_data(radar):
         point_rad_velocity -> array : Compensated radial velocity of the point
         velocity_phi -> array : Azimuth of the radial velocity vectors
     """
+    ## Get required features from radar pointcloud
     x_points = radar.points[0]
     y_points = radar.points[1]
     z_points = radar.points[2]
@@ -91,6 +92,7 @@ def custom_map_pointcloud_to_image(nusc,
         im -> PIL Image : Image frame for the instance
     """
     # rpc.abidefaults()
+    ## Disable all the radar filter settings
     rpc.disable_filters()
     cam = nusc.get('sample_data', camera_token)
     pointsensor = nusc.get('sample_data', pointsensor_token)
@@ -105,9 +107,13 @@ def custom_map_pointcloud_to_image(nusc,
 
     point_dist, point_phi, point_rad_velocity, velocity_phi = calculation_of_radar_data(
         pc)
-
+    ## Convert from meters/h to Km/h
     detections_radial_velocity_kmph = point_rad_velocity * 3.6
+
+    ## Get Clusterlist object for velocity vectors azimuth and point distance
     point_cluster = appendtoclusterlist(velocity_phi, point_dist)
+
+    ## Cluster all points which are within 2.5 radians of vel_phi and 5m distance as same cluster
     cluster_list = point_cluster.cluster_cluster(2.5, 5)
 
     detections_radial_velocity_kmph = np.reshape(
@@ -118,6 +124,8 @@ def custom_map_pointcloud_to_image(nusc,
         point_dist, (1, point_dist.shape[0]))
     velocity_phi = np.reshape(
         velocity_phi, (1, velocity_phi.shape[0]))
+
+    ## append calculated features to the radar pointcloud
     points = np.append(pc.points, velocity_phi, axis=0)
     points = np.append(points, d_phi, axis=0)
     points = np.append(points, d_dist, axis=0)
@@ -151,11 +159,14 @@ def custom_map_pointcloud_to_image(nusc,
     # Grab the depths (camera frame z axis points away from the camera).
     depths = pc.points[2, :]
 
+    ## Let the coloring be based on clusters formed
     coloring = cluster_list
 
     # Take the actual picture (matrix multiplication with camera-matrix + renormalization).
     points = view_points(pc.points[:3, :], np.array(
         cs_record['camera_intrinsic']), normalize=True)
+
+    ## rebuilding the pointcloud features
     points = np.append(points, pc.points[3:22, :], axis=0)
     # Remove points that are either outside or behind the camera. Leave a margin of 1 pixel for aesthetic reasons.
     # Also make sure points are at least 1m in front of the camera to avoid seeing the lidar points on the camera
@@ -188,6 +199,8 @@ def appendtoclusterlist(x, y):
 
     """
     cl = ClusterLists()
+
+    ## Forming the clustelist based on data provided
     for data in zip(x, y):
         cl.append(Cluster(data[0], data[1]))
     return cl
@@ -211,8 +224,10 @@ def get_boxes_yolo(frame, method, point, visualize=False, verbose=False):
         bbox -> list : Vehicle detected box coordinates
 
     """
-    if method == 2:
+    if method == 2:  ## Modified YOLOv3
         #frame_copy = np.copy(frame)
+
+        ## Empirically define the region or sub-frame size based on point distance value
         if point[3] < 15:
             frame_size = 450
 
@@ -222,6 +237,7 @@ def get_boxes_yolo(frame, method, point, visualize=False, verbose=False):
         else:
             frame_size = 100
 
+        ## Crop regions to form a new frame
         x1 = int(round(point[0])) - (frame_size)
         y1 = int(round(point[1])) - (frame_size)
         x2 = int(round(point[0])) + (frame_size)
@@ -229,8 +245,10 @@ def get_boxes_yolo(frame, method, point, visualize=False, verbose=False):
 
         frame = np.array(frame.crop((x1, y1, x2, y2)))
     else:
+        ## Original YOLOv3
         frame = np.array(frame)
         x1 = y1 = 0
+
     bbox, label, confidence = get_yolo_detections(frame, (x1, y1))
     if visualize:
         for i, box in enumerate(bbox):
@@ -297,11 +315,16 @@ def load_net(weights_location='data/YOLOv3/yolov3.weights', config_location='dat
         classes -> list : Class names
 
     """
+    ## Load the net based on weights and config provided
     net = cv2.dnn.readNet(weights_location, config_location)
     #net = cv2.dnn_DetectionModel(config_location, weights_location)
     classes = []
+
+    ## Load all the classes
     with open(names_location, "r") as f:
         classes = [line.strip() for line in f.readlines()]
+    
+    ## Define the output layers built based on loaded net
     layer_names = net.getLayerNames()
     output_layers = [layer_names[i[0] - 1]
                      for i in net.getUnconnectedOutLayers()]
@@ -325,6 +348,7 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
         confidence -> list : Predicted boxes confidence scores
 
     """
+    
     global net, output_layers, classes
     height, width, channels = frame.shape
     blob = cv2.dnn.blobFromImage(
@@ -339,6 +363,8 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
+
+            ## Take the detections whose confidence score is greater than 0.5 and classes of the boxes are [car,bus,truck]
             if confidence > 0.5 and class_id in [2, 5, 7]:
                 center_x = int(detection[0] * width)
                 center_y = int(detection[1] * height)
@@ -349,6 +375,8 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
                 boxes.append([x, y, w, h])
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
+    
+    ## All the boxes with scores greater than 0.5 and Non-Max Sopression greater than 0.4 are defined as predicted detections
     indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
     bbox = []
     label = []
@@ -368,6 +396,7 @@ def get_yolo_detections(frame, primary_origin=(0, 0)):
 
 
 def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=None):
+    # Inspired from https://github.com/JunshengFu/vehicle-detection/blob/master/svm_pipeline.py
     """
         Helper function to predict the vehicle box coordinates through SVM classifier approach 
 
@@ -384,6 +413,7 @@ def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=No
         final_boxes -> list : Vehicle detected box coordinates
 
     """
+    ## Empirically define the region or sub-frame size based on point distance value
     if point[3] < 15:
         frame_size = 500
         #frame_size_y = 500
@@ -410,6 +440,8 @@ def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=No
 
     else:
         frame_size = False
+
+    ## Empirically calculate the window sizes based on the frame size
     if frame_size:
         if point[3] > 14:
             window_size_1 = int(0.5 * (frame_size))
@@ -417,28 +449,38 @@ def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=No
         else:
             window_size_1 = int(0.65 * (frame_size))
             window_size_2 = int(0.45 * (frame_size))
+        
+        ## Crop regions to form a new frame
         x1 = int(round(point[0])) - ((frame_size) // 2)
         y1 = int(round(point[1])) - ((frame_size) // 2)
         x2 = int(round(point[0])) + ((frame_size) // 1.5)
         y2 = int(round(point[1])) + ((frame_size) // 3)
         frame = frame.crop((x1, y1, x2, y2))
 
+        ## Define the overlap value based on the SVM model/method
         if method == 0:
             overlap = 0.09
         else:
             overlap = 0.10
         frame = np.array(frame)
+
+        ## Get all the windows
         sliding_window_1 = get_window_slides(
             frame, window_size_1, overlap=overlap)
         # sliding_window_1 = get_window_slides(
         # frame, window_size_2, overlap=0.10)
         sliding_windows = sliding_window_1  # + sliding_window_2
 
+        ## Get all windows predicted as vehicles
         vehicle_slides = predict_vehicles_slides_2(
             frame, method, sliding_windows)
         #vehicle_slides = predict_vehicles_slides(frame, sliding_windows)
+
+        ## Get the final bounding boxes based on vehicle window predictions
         proba_frame, calculated_slides = get_calculated_box(
             frame.shape, vehicle_slides)
+
+        ## Draw all the windows/boxes on the image frame
         frame_slides_complete = frame_slides_canvas(frame, sliding_windows)
         frame_slides_refined = frame_slides_canvas(frame, vehicle_slides)
         frame_slides_final = frame_slides_canvas(frame, calculated_slides)
@@ -458,6 +500,7 @@ def get_boxes_svm(frame=None, visualize=False, verbose=False, method=1, point=No
 
         final_boxes = []
         for j, slide in enumerate(calculated_slides):
+            ## Convert the bounding boxes from sub-frame to image co-ordinates
             if (slide != None and len(slide) > 0):
                 a = x1 + slide[0][0]
                 b = y1 + slide[0][1]
@@ -490,14 +533,23 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
     """
     p, color, frame = custom_map_pointcloud_to_image(
         nusc, pointsensor_token, camera_token, verbose)
+
+    ## Get only the X, Y and the calculated Radar features from the pointcloud
     filtered_col = p[[0, 1, 18, 19, 20, 21], :]
+
+    ## Cluster information
     color = np.array(color).reshape(1, color.shape[0])
+
+    ## Append both to a np array
     new_p = np.append(filtered_col, color, axis=0)
-    # Get all unique cluster values
+    ## Get all unique cluster values
     un = np.unique(color, axis=1)
     averages = []
 
     def restrict_dupli_frames(average, averages):
+        """
+        Checks if the "average" region is redundant for other "averages" regions
+        """
         flag = 1
 
         for avg in averages:
@@ -506,16 +558,22 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
                 return False
         return True
 
+    ## Loop through unique cluster values
     for i, val in enumerate(un[0], 0):
+
+        ## Getting all the filtered pointcloud data for a specific cluster value and also has compensated radial velocity above a threshold
         mask = np.logical_and(new_p[6, :] == val, new_p[5, :] > 7)
         filtered_points = new_p[:, mask]
 
         if filtered_points.shape[1] > 0:
+
+            ## Average all the point cloud data and store it in a var
             average = np.mean(filtered_points, axis=1)
             if len(averages) == 0:
                 averages.append(
                     [average[0], average[1], average[3], average[4]])
             else:
+                ## Check for dupilcate frames and append only if not
                 if restrict_dupli_frames([average[0], average[1]], averages):
                     averages.append(
                         [average[0], average[1], average[3], average[4]])
@@ -525,8 +583,16 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
     if verbose:
         print('     Total number of point regions to be verified:', len(averages))
 
+    ## method[0]= 0 = MODEL A,
+    ##            1 = MODEL B,
+    ##            2 = Modified YOLOv3,
+    ##            3 = Original YOLOv3
+
+    ## method[1]= 0 = No parallel processing,
+    ##            1 = Parallel processing,
     if method[0] <= 1:
         if (method[1]) == 1:
+            ## Open process pool and get bounding boxes through get_boxes_svm(...) for every "average" radar point
             pool = multiprocessing.Pool()
             func = partial(get_boxes_svm, frame,
                            visualize_sub_frames, verbose, method[0])
@@ -534,14 +600,18 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
             pool.close()
             pool.join()
         else:
+            ## Get bounding boxes through get_boxes_svm(...) for every "average" radar point
             for average in averages:
                 boxes.append(get_boxes_svm(
                     frame, visualize_sub_frames, verbose, method[0], average))
     elif method[0] == 2:
+
+        ## Get bounding boxes through get_boxes_yolo(...) for every "average" radar point
         for average in averages:
             boxes.append(get_boxes_yolo(
                 frame, method[0], average, visualize_sub_frames, verbose))
     else:
+        ## Get bounding boxes through get_boxes_yolo(...) for every "average" radar point
         boxes.append(get_boxes_yolo(
             frame, method[0], (0, 0, 0, 0), visualize_sub_frames, verbose))
     frame = np.array(frame)
@@ -560,6 +630,8 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
                         # plt.imshow(frame)
                         # plt.show()
                     else:
+
+                        ## Check if an approximate bounding box is predicted already and if it's predicted already add/retain the one with more area and remove the other
                         if check_box_area([[a, b], [c, b], [c, d], [a, d]], box, frame):
                             box.append([[a, b], [c, b], [c, d], [a, d]])
                             #cv2.rectangle(frame, (a, b), (c, d), color=(0, 255, 0), thickness=2)
@@ -581,6 +653,8 @@ def get_marked_frames(nusc, pointsensor_token, camera_token, method=(2, 0), visu
     if verbose:
         print('     Total number of vehicle regions predicted in frame:', len(box))
     marked_boxes = []
+
+    ## Build the final bounding boxes unified to same format (All the approaches)
     for rect in box:
         cv2.rectangle(frame, (rect[0][0], rect[0][1]), (rect[2][0], rect[2][1]), color=(
             0, 255, 0), thickness=2)
@@ -611,6 +685,8 @@ def points_in_image(points, averages, colouring, frame):
 
     frame_copy = np.copy(frame)
     fig, ax = plt.subplots()
+
+    ## Scatter points based on transformed X & Y coordinates of Radar points and color based on its cluster value
     sc = ax.scatter(points[0, ], points[1, ], c=colouring[0], s=8, alpha=0.5)
     averages = np.transpose(averages)
 
@@ -620,7 +696,9 @@ def points_in_image(points, averages, colouring, frame):
     t = sc.get_offsets()
 
     def update_annot(ind):
-
+        """
+        Build the hover data
+        """
         pos = sc.get_offsets()[ind["ind"][0]]
         annot.xy = pos
         text = "{}\n Velocitty Phi ={},\n Phi = {}\n dist={},\n Rad vel ={},\n cluster ={}".format(" ".join(list(map(str, ind["ind"]))),
@@ -637,6 +715,9 @@ def points_in_image(points, averages, colouring, frame):
         annot.get_bbox_patch().set_alpha(0.4)
 
     def hover(event):
+        """
+        Capture the hover event and perform suitable action(s)
+        """
         vis = annot.get_visible()
         if event.inaxes == ax:
             cont, ind = sc.contains(event)
@@ -649,7 +730,10 @@ def points_in_image(points, averages, colouring, frame):
                     annot.set_visible(False)
                     fig.canvas.draw_idle()
     fig.canvas.mpl_connect("motion_notify_event", hover)
+
+    ## Scatter the predicted moving vehicle predicted points
     sc2 = ax.scatter(averages[0, ], averages[1, ], s=14, alpha=0.9)
+    
     plt.imshow(frame_copy)
     plt.show()
 
@@ -691,6 +775,8 @@ def check_box_area(box1, boxes, frame, visualize=False):
             #a1, a2 = get_box_area(box1, box2)
             a1 = get_box_area(box1)
             a2 = get_box_area(box2)
+
+            ## Checks if area of interesection between two boxes is less than 15% of other, if not it is considered as redundant prediction
             if intersection < 0.15*a1 and intersection < 0.15*a2:
                 continue
             else:
@@ -767,21 +853,32 @@ def get_window_slides(frame, window_size, overlap):
     assert frame.shape[1] > window_size
     window_slides = []
     # print(frame.shape[0],frame.shape[1],window_size)
+
+    ## Defines number of windows in rows and coloumns based on the frame shape, winodow size and overlap
+
     n_x_windows = int(frame.shape[1]//(window_size*overlap))
     n_y_windows = int(frame.shape[0]//(window_size*overlap))
     # print(n_x_windows,n_y_windows)
+    
+    ## Next row starting point
     y_window_seed = 0
     for i in range(0, n_y_windows):
         if (y_window_seed+window_size) < frame.shape[0]:
+            
+            ## Next column starting point
             x_window_seed = 0
             for j in range(0, n_x_windows):
                 if (x_window_seed + window_size) < frame.shape[1]:
                     # print((x_window_seed,y_window_seed),(x_window_seed+window_size,y_window_seed+window_size))
                     window_slides.append(
                         [(x_window_seed, y_window_seed), (x_window_seed+window_size, y_window_seed+window_size)])
+                    
+                    ## Update column starting point
                     x_window_seed = int(x_window_seed + (window_size*overlap))
                 else:
                     break
+            
+            ## Update row starting point
             y_window_seed = int(y_window_seed + (window_size*overlap))
         else:
             break
@@ -849,7 +946,10 @@ def predict_vehicles_slides_2(frame, method, slide_windows):
     """
 
     vehicle_slides = []
+
+    ## Get the loaded model data
     global svc, xscaler
+
     for slide_window in slide_windows:
 
         sub_frame = frame[slide_window[0][1]: slide_window[1]
@@ -858,16 +958,23 @@ def predict_vehicles_slides_2(frame, method, slide_windows):
         sub_frame = cv2.resize(sub_frame, (64, 64))
 
         if method == 0:
+            ## Get all the required features from images to feed in the classifer as input
             hog_feat = get_hog_features(sub_frame, 15, (8, 8))
             rs_bins, sf_hist = get_other_features(sub_frame)
             test_stacked = np.hstack(
                 (rs_bins, sf_hist, hog_feat[0])).reshape(1, -1)
             #test_stacked = np.hstack((rs_bins, hog_feat[0])).reshape(1, -1)
+
+            ## Normalize value using the Standard scaler value which is already built
             hog_feat_2 = xscaler.transform(test_stacked)
             # prediction=svc.predict(j)
+
             prediction = svc.predict(hog_feat_2)
         else:
+            
+            ## Extract the required image feature
             hog_feat = get_hog_features(sub_frame)
+
             prediction = svc.predict(hog_feat)
         if prediction == 1:
             vehicle_slides.append(slide_window)
@@ -875,7 +982,7 @@ def predict_vehicles_slides_2(frame, method, slide_windows):
 
 
 def predict_vehicles_slides(frame, slide_windows):
-    # Replaced this function with predict_vehicles_slides_2 function
+    ## Replaced this function with predict_vehicles_slides_2 function
     vehicle_slides = []
     global svc
     for slide_window in slide_windows:
@@ -919,7 +1026,7 @@ def get_hog_features(frame, orientations=9, pixels_per_cell=(16, 16), cells_per_
 
 def get_calculated_box(frame_size, slide_windows):
     """
-        Function to check for the most overlaps by predicted car regions give the final vehicle detection box
+        Function to check for the most overlapping area in the predicted car regions and return the final vehicle detection box
 
         Parameters
         ----------
@@ -932,11 +1039,16 @@ def get_calculated_box(frame_size, slide_windows):
         calculated_slides -> list : List of predicted vehicle boxes in Frame of size frame_size
     """
 
+    ## Build a dummy frame based on original frame size
     proba_frame = np.zeros((frame_size[0], frame_size[1]))
+    
+    ## Increase counter value for all the predicted car regions
     for slide_window in slide_windows:
         proba_frame[slide_window[0][1]:slide_window[1][1],
                     slide_window[0][0]:slide_window[1][0]] += 1
     # print(proba_frame)
+
+    ## Set all the counters to zero where the values are less than number of predicted car regions
     proba_frame[proba_frame <= (len(slide_windows)//2)] = 0
 
     proba_frame, n_vehicles = label(proba_frame)
@@ -994,6 +1106,8 @@ def get_annotations(nusc, scene_annotations, cam_token, visualize=False, verbose
         cam = cam_token
         ann_record = nusc.get('sample_annotation', ann_token)
 
+
+        ## Filtering the annotation to 'car' and 'truck', with a 'vehicle.moving' attribute
         if len(ann_record['attribute_tokens']) > 0 and ann_record['category_name'] in ['vehicle.car', 'vehicle.truck']:
             att_token = ann_record['attribute_tokens'][0]
             att_record = nusc.get('attribute', att_token)
@@ -1002,6 +1116,7 @@ def get_annotations(nusc, scene_annotations, cam_token, visualize=False, verbose
                 data_path, boxes, camera_intrinsic = nusc.get_sample_data(
                     cam_token, selected_anntokens=[ann_token])
 
+                ## Build the annotated_boxes
                 for box in boxes:
 
                     corners = view_points(
@@ -1066,17 +1181,21 @@ def get_accuracy(marked_boxes, annotated_boxes, frame, visualize=False, verbose=
         True positives : int
         False Positives : int
     """
-
     tp = fp = fn = 0
     iou_list = []
     average = 0.5
+
     for annotated_box in annotated_boxes:
         frame_copy = np.copy(frame)
+
+        ## Default values
         max_iou = -1
         pos = -1
         for i, marked_box in enumerate(marked_boxes):
             frame_copy2 = np.copy(frame_copy)
             iou = calculate_iou(marked_box, annotated_box)
+
+            ## Checks for the best predicted/marked box match in comparison with annotated box
             if iou > max_iou and iou > 0.5:
                 max_iou = iou
                 pos = i
@@ -1088,6 +1207,8 @@ def get_accuracy(marked_boxes, annotated_boxes, frame, visualize=False, verbose=
             plt.show() """
         if verbose:
             print('         IoU is:', max_iou)
+        
+        ## Build confusion matrix quadrants based on the 'max_iou' value
         if max_iou > 0.5:
             tp = tp + 1
         elif max_iou >= 0:
@@ -1137,7 +1258,7 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
         :param verbose: Boolean variable to display console logs
         :param save_file: Boolean variable to save detections to a file
     """
-    # Load Nuscenes object and specify required channels
+    ## Load Nuscenes object and specify required channels
     location = 'data/v1.0-mini'
     nusc = NuScenes(version='v1.0-mini', dataroot=location, verbose=False)
     pointsensor_channel = 'RADAR_FRONT'
@@ -1145,8 +1266,9 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
     frames = []
     global net, output_layers, classes, svc, xscaler
 
-    # Load model
+    ## Loading model/network once per session, so that it is not repeated for every single scene/frame
     if method[0] > 1:
+    
         net, output_layers, classes = load_net()
         if verbose:
             print('Loaded YOLO Net')
@@ -1162,7 +1284,7 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
 
     t0 = time.time()
 
-    # Scenes iterator
+    ## Scenes iterator
     for scene in nusc.scene:
         # if verbose:
         #    print('Scene description: ',scene['description'])
@@ -1176,15 +1298,17 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
             if verbose:
                 print('     -------------------New-Scene----------------')
             sample_record = nusc.get('sample', check_token)
+
+            ## Getting front radar and camera sensors' token value
             pointsensor_token = sample_record['data'][pointsensor_channel]
             camera_token = sample_record['data'][camera_channel]
 
-            # Get all the frames with detected moving vehicles
+            ## Get all the frames with detected moving vehicles
             marked_frames, marked_boxes = get_marked_frames(
                 nusc, pointsensor_token, camera_token, method, visualize_frames, visualize_sub_frames, verbose)
             frames.append(marked_frames)
 
-            # Validates the prediction based on  validate_result parameter
+            ## Validates the prediction based on  validate_result parameter
             if validate_results:
                 scene_annotations = sample_record['anns']
                 annotated_boxes = get_annotations(
@@ -1200,12 +1324,12 @@ def run_detection_system(method=(2, 0), validate_results=False, visualize_frames
         if validate_results and scene['name'] == 'scene-0061':
             print('Avg Precision is:', sum(pre) / (len(pre)))
             print('Avg Recall is:', sum(rec)/(len(rec)))
-            # Not using mAP for just one scene and hence commented the below function call
+            ## Not using mAP for just one scene and hence commented the below function call
             #getmap(pre, rec)
     t1 = time.time()
     t = t1-t0
     print('Time for ', filename, 'is:', t)
-    # Save the detected frames as video
+    ## Save the detected frames as video if needed
     if save_file:
         save_video(frames, filename, 10, frames[0].shape[:2])
 
@@ -1217,7 +1341,7 @@ def validate_args(args):
     """
 
     try:
-        if type(args.c) == int and type(args.p) == int and args.c >= 0 and args.c <= 3 and args.p >= 0 and args.p <= 1 :
+        if type(args.c) == int and type(args.p) == int and args.c >= 0 and args.c <= 3 and args.p >= 0 and args.p <= 1:
             if args.c > 1 and args.p > 0:
                 print(
                     'No Parallel processing required for YOLOv3 version. Setting it to default')
@@ -1236,7 +1360,7 @@ def validate_args(args):
 
 
 if __name__ == "__main__":
-    #run_detection_system((2, 0), True,
+    # run_detection_system((2, 0), True,
     #                     False, False, False, False)
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', type=int, default=2,
