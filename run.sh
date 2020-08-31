@@ -87,6 +87,7 @@ done
 
 PrintValues()
 {
+   echo
    echo classifier 
    echo $classifier 
    echo parallel
@@ -101,7 +102,8 @@ PrintValues()
    echo $verbose
    echo savefile
    echo $savefile
+   echo
 }
 #PrintValues
-
+source dependencies.sh
 python3 detectionsystem.py -c $classifier -p $parallel -t $validation -f $visualiseFrames -s $visualisesubFrames -v $verbose -k $savefile
